@@ -2,6 +2,7 @@ import { HistoryItem, UserProfile, FullAnalysisResponse } from "../types";
 
 const USER_KEY = 'context_lens_user';
 const HISTORY_KEY = 'context_lens_history';
+const THEME_KEY = 'context_lens_theme';
 
 export const StorageService = {
   getUser: (): UserProfile | null => {
@@ -47,5 +48,13 @@ export const StorageService = {
     const updated = history.filter(item => item.id !== id);
     localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
     return updated;
+  },
+
+  getTheme: (): 'light' | 'dark' => {
+    return (localStorage.getItem(THEME_KEY) as 'light' | 'dark') || 'light';
+  },
+
+  saveTheme: (theme: 'light' | 'dark'): void => {
+    localStorage.setItem(THEME_KEY, theme);
   }
 };

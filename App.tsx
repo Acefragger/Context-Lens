@@ -15,11 +15,25 @@ const LOADING_MESSAGES = [
   "Estimating repair costs..."
 ];
 
+// Helper for URL validation
+const isValidUrl = (urlString: string | null | undefined): boolean => {
+  if (!urlString) return false;
+  try {
+    const url = new URL(urlString);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch (e) {
+    return false;
+  }
+};
+
 const App: React.FC = () => {
   // Auth State
   const [user, setUser] = useState<UserProfile | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+
+  // Theme State
+  const [isDarkMode, setIsDarkMode] = useState<'light' | 'dark'>(() => StorageService.getTheme());
 
   // App State
   const [file, setFile] = useState<File | null>(null);
@@ -44,11 +58,45 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // Handle Dark Mode changes
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDarkMode === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    StorageService.saveTheme(isDarkMode);
+  }, [isDarkMode]);
+
+  const toggleTheme = () => {
+    setIsDarkMode(prev => prev === 'light' ? 'dark' : 'light');
+  };
+
   // Helper to determine which preview to show
   const currentPreviewUrl = useMemo(() => {
     if (restoredPreviewUrl) return restoredPreviewUrl;
     return file ? URL.createObjectURL(file) : null;
   }, [file, restoredPreviewUrl]);
+
+  // Derived state for validated links
+  const { productSearchUrl, fallbackSearchUrl, validGroundingSources } = useMemo(() => {
+    if (!result) return { productSearchUrl: null, fallbackSearchUrl: null, validGroundingSources: [] };
+
+    const productQuery = result.data?.product_search_query;
+    const pUrl = productQuery ? `https://www.google.com/search?q=${encodeURIComponent(productQuery)}` : null;
+    
+    const fallbackQuery = result.data?.object_name ? `${result.data.object_name} fix` : null;
+    const fUrl = fallbackQuery ? `https://www.google.com/search?q=${encodeURIComponent(fallbackQuery)}` : null;
+
+    const sources = (result.groundingSources || []).filter(source => isValidUrl(source.uri));
+
+    return {
+      productSearchUrl: isValidUrl(pUrl) ? pUrl : null,
+      fallbackSearchUrl: isValidUrl(fUrl) ? fUrl : null,
+      validGroundingSources: sources
+    };
+  }, [result]);
 
   // Manage loading animation
   useEffect(() => {
@@ -155,9 +203,10 @@ const App: React.FC = () => {
       StorageService.addToHistory(fullBase64, note, analysisResponse);
       setHistory(StorageService.getHistory());
 
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Failed to analyze the image. Please ensure you have a valid API key and try again.");
+      // Show the actual error message if available, for better debugging
+      setError(err.message || "Failed to analyze the image. Please ensure you have a valid API key and try again.");
     } finally {
       setIsAnalyzing(false);
     }
@@ -165,15 +214,17 @@ const App: React.FC = () => {
 
   // If not logged in, show Auth
   if (!user) {
-    return <Auth onLogin={handleLogin} />;
+    return <Auth onLogin={handleLogin} isDarkMode={isDarkMode === 'dark'} toggleTheme={toggleTheme} />;
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 pb-20 transition-colors duration-200">
       <Header 
         user={user} 
         onOpenHistory={() => setIsHistoryOpen(true)} 
         onLogout={handleLogout}
+        isDarkMode={isDarkMode === 'dark'}
+        toggleTheme={toggleTheme}
       />
       
       <HistorySidebar 
@@ -186,18 +237,18 @@ const App: React.FC = () => {
 
       <main className="max-w-3xl mx-auto px-4 pt-6">
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-start animate-fade-in-up">
+          <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-xl flex items-start animate-fade-in-up">
              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
             </svg>
-            {error}
+            <span className="break-words">{error}</span>
           </div>
         )}
 
         {!result ? (
           isAnalyzing ? (
             /* Loading View */
-            <div className="bg-white p-10 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center justify-center min-h-[450px] animate-fade-in-up">
+            <div className="bg-white dark:bg-slate-800 p-10 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col items-center justify-center min-h-[450px] animate-fade-in-up transition-colors">
               <style>{`
                 @keyframes scan {
                   0% { top: 0%; opacity: 0.5; }
@@ -206,7 +257,7 @@ const App: React.FC = () => {
                 }
               `}</style>
 
-              <div className="relative w-32 h-32 mb-8 rounded-2xl overflow-hidden shadow-lg ring-4 ring-indigo-50">
+              <div className="relative w-32 h-32 mb-8 rounded-2xl overflow-hidden shadow-lg ring-4 ring-indigo-50 dark:ring-indigo-900/30">
                 {currentPreviewUrl && (
                   <img 
                     src={currentPreviewUrl} 
@@ -214,32 +265,32 @@ const App: React.FC = () => {
                     alt="Analyzing" 
                   />
                 )}
-                <div className="absolute inset-0 bg-indigo-500/10"></div>
+                <div className="absolute inset-0 bg-indigo-500/10 dark:bg-indigo-400/10"></div>
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-400 to-transparent shadow-[0_0_15px_rgba(99,102,241,0.8)] animate-[scan_2s_ease-in-out_infinite]"></div>
               </div>
 
-              <h3 className="text-xl font-bold text-slate-800 mb-2">Analyzing Image</h3>
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2">Analyzing Image</h3>
               
-              <p className="text-slate-500 font-medium mb-8 h-6 transition-all duration-300 text-center">
+              <p className="text-slate-500 dark:text-slate-400 font-medium mb-8 h-6 transition-all duration-300 text-center">
                 {LOADING_MESSAGES[loadingMessageIndex]}
               </p>
 
-              <div className="w-full max-w-md bg-slate-100 rounded-full h-3 mb-4 overflow-hidden">
+              <div className="w-full max-w-md bg-slate-100 dark:bg-slate-700 rounded-full h-3 mb-4 overflow-hidden">
                 <div 
-                  className="bg-indigo-600 h-full rounded-full transition-all duration-300 ease-out"
+                  className="bg-indigo-600 dark:bg-indigo-500 h-full rounded-full transition-all duration-300 ease-out"
                   style={{ width: `${loadingProgress}%` }}
                 ></div>
               </div>
               
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-slate-400 dark:text-slate-500">
                 This may take a few seconds...
               </p>
             </div>
           ) : (
             /* Input View */
             <div className="space-y-6 animate-fade-in-up">
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                <h2 className="text-lg font-semibold text-slate-800 mb-4">Upload an object or scene</h2>
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 transition-colors">
+                <h2 className="text-lg font-semibold text-slate-800 dark:text-white mb-4">Upload an object or scene</h2>
                 <FileUpload 
                   onFileSelect={handleFileSelect} 
                   selectedFile={file} 
@@ -248,7 +299,7 @@ const App: React.FC = () => {
 
                 {/* If we have a restored preview but no file object (viewing history), show it */}
                 {!file && restoredPreviewUrl && (
-                  <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-md group mb-6">
+                  <div className="relative rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-md group mb-6">
                     <img 
                       src={restoredPreviewUrl} 
                       alt="History Preview" 
@@ -266,7 +317,7 @@ const App: React.FC = () => {
                 )}
 
                 <div className="space-y-2">
-                  <label htmlFor="context-note" className="block text-sm font-medium text-slate-700">
+                  <label htmlFor="context-note" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                     Add context note (optional)
                   </label>
                   <input
@@ -275,7 +326,7 @@ const App: React.FC = () => {
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                     placeholder="e.g., 'my toaster sparks', 'broken hinge', 'weird noise'"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
                   />
                 </div>
               </div>
@@ -283,7 +334,7 @@ const App: React.FC = () => {
               <button
                 onClick={handleAnalyze}
                 disabled={(!file && !restoredPreviewUrl)}
-                className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-md hover:shadow-lg transform transition-all duration-200 active:scale-[0.98]"
+                className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 disabled:bg-slate-300 dark:disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl shadow-md hover:shadow-lg transform transition-all duration-200 active:scale-[0.98]"
               >
                 Analyze Image
               </button>
@@ -293,18 +344,18 @@ const App: React.FC = () => {
           /* Results View */
           <div className="animate-fade-in-up pb-10">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-slate-800">Analysis Result</h2>
+              <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Analysis Result</h2>
               <button 
                 onClick={handleClear}
-                className="text-indigo-600 font-medium hover:text-indigo-800 px-4 py-2 rounded-lg hover:bg-indigo-50 transition-colors"
+                className="text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-300 px-4 py-2 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
               >
                 Analyze Another
               </button>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-700 overflow-hidden transition-colors">
               {/* Header Image */}
-              <div className="h-48 w-full relative bg-slate-100">
+              <div className="h-48 w-full relative bg-slate-100 dark:bg-slate-700">
                  <img 
                     src={currentPreviewUrl || ''} 
                     alt="Analyzed Object" 
@@ -327,7 +378,7 @@ const App: React.FC = () => {
                 
                 {/* Safety Warning */}
                 {result.data?.safety_warning && (
-                  <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl">
+                  <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 rounded-r-xl">
                     <div className="flex">
                       <div className="flex-shrink-0">
                         <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
@@ -335,8 +386,8 @@ const App: React.FC = () => {
                         </svg>
                       </div>
                       <div className="ml-3">
-                        <h3 className="text-sm font-medium text-red-800">Safety Warning</h3>
-                        <div className="mt-1 text-sm text-red-700">
+                        <h3 className="text-sm font-medium text-red-800 dark:text-red-300">Safety Warning</h3>
+                        <div className="mt-1 text-sm text-red-700 dark:text-red-200">
                           {result.data.safety_warning}
                         </div>
                       </div>
@@ -347,21 +398,21 @@ const App: React.FC = () => {
                 {/* Issue & Causes */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div>
-                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">The Issue</h3>
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 h-full">
-                      <p className="text-lg font-medium text-slate-800 mb-2">{result.data?.issue_detected}</p>
-                      <p className="text-slate-600 text-sm leading-relaxed">{result.data?.importance}</p>
+                    <h3 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">The Issue</h3>
+                    <div className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-xl border border-slate-100 dark:border-slate-600 h-full">
+                      <p className="text-lg font-medium text-slate-800 dark:text-slate-100 mb-2">{result.data?.issue_detected}</p>
+                      <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed">{result.data?.importance}</p>
                     </div>
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Likely Causes</h3>
+                    <h3 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">Likely Causes</h3>
                     <ul className="space-y-2">
                       {(result.data?.likely_causes || []).map((cause, idx) => (
                         <li key={idx} className="flex items-start">
-                          <span className="flex-shrink-0 h-5 w-5 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold mr-3 mt-0.5">
+                          <span className="flex-shrink-0 h-5 w-5 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs font-bold mr-3 mt-0.5">
                             {idx + 1}
                           </span>
-                          <span className="text-slate-700">{cause}</span>
+                          <span className="text-slate-700 dark:text-slate-300">{cause}</span>
                         </li>
                       ))}
                     </ul>
@@ -370,17 +421,17 @@ const App: React.FC = () => {
 
                 {/* Action Plan */}
                 <div>
-                   <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">How to Fix It</h3>
-                   <div className="bg-indigo-50/50 rounded-2xl p-6 border border-indigo-100">
+                   <h3 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4">How to Fix It</h3>
+                   <div className="bg-indigo-50/50 dark:bg-indigo-900/20 rounded-2xl p-6 border border-indigo-100 dark:border-indigo-800/50">
                       <div className="space-y-4">
                         {(result.data?.steps || []).map((step, idx) => (
                           <div key={idx} className="flex">
                             <div className="flex-shrink-0 mr-4">
-                              <div className="h-8 w-8 rounded-full bg-white border-2 border-indigo-200 flex items-center justify-center text-indigo-600 font-bold shadow-sm">
+                              <div className="h-8 w-8 rounded-full bg-white dark:bg-slate-800 border-2 border-indigo-200 dark:border-indigo-700 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold shadow-sm">
                                 {idx + 1}
                               </div>
                             </div>
-                            <p className="text-slate-700 mt-1">{step}</p>
+                            <p className="text-slate-700 dark:text-slate-300 mt-1">{step}</p>
                           </div>
                         ))}
                       </div>
@@ -389,22 +440,22 @@ const App: React.FC = () => {
 
                 {/* Estimates & Products */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-slate-50 rounded-xl p-5 border border-slate-100">
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Estimates</h3>
+                  <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 border border-slate-100 dark:border-slate-600">
+                    <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-4">Estimates</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-xs text-slate-500 mb-1">Estimated Cost</p>
-                        <p className="text-lg font-bold text-slate-800">{result.data?.estimation?.price_range || "N/A"}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Estimated Cost</p>
+                        <p className="text-lg font-bold text-slate-800 dark:text-slate-100">{result.data?.estimation?.price_range || "N/A"}</p>
                       </div>
                       <div>
-                         <p className="text-xs text-slate-500 mb-1">Time to Fix</p>
-                        <p className="text-lg font-bold text-slate-800">{result.data?.estimation?.time_estimate || "N/A"}</p>
+                         <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Time to Fix</p>
+                        <p className="text-lg font-bold text-slate-800 dark:text-slate-100">{result.data?.estimation?.time_estimate || "N/A"}</p>
                       </div>
                     </div>
                   </div>
 
                   {/* Product Recommendations */}
-                  <div className="bg-gradient-to-br from-indigo-600 to-blue-600 rounded-xl p-5 text-white shadow-lg transform hover:scale-[1.02] transition-transform">
+                  <div className="bg-gradient-to-br from-indigo-600 to-blue-600 dark:from-indigo-800 dark:to-blue-800 rounded-xl p-5 text-white shadow-lg transform hover:scale-[1.02] transition-transform">
                     <div className="flex items-start justify-between mb-2">
                       <h3 className="text-xs font-bold text-indigo-100 uppercase tracking-wider">Parts & Tools</h3>
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-indigo-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -412,29 +463,29 @@ const App: React.FC = () => {
                       </svg>
                     </div>
                     
-                    {result.data?.product_search_query ? (
+                    {productSearchUrl ? (
                       <>
                         <p className="text-sm text-indigo-100 mb-4">
                           Based on our analysis, you might need parts like:
                           <br/>
-                          <span className="font-bold text-white italic">"{result.data.product_search_query}"</span>
+                          <span className="font-bold text-white italic">"{result.data?.product_search_query}"</span>
                         </p>
                         <a 
-                          href={`https://www.google.com/search?tbm=shop&q=${encodeURIComponent(result.data.product_search_query)}`}
+                          href={productSearchUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="block w-full text-center bg-white text-indigo-600 py-2.5 rounded-lg font-semibold hover:bg-indigo-50 transition-colors"
                         >
-                          Find on Google Shopping
+                          Search Online & Locally
                         </a>
                       </>
-                    ) : (
+                    ) : fallbackSearchUrl ? (
                       <>
                         <p className="text-sm text-indigo-100 mb-4">
                            No specific parts detected, but you can browse tools or related items.
                         </p>
                         <a 
-                          href={`https://www.google.com/search?q=${encodeURIComponent(result.data?.object_name + " fix")}`}
+                          href={fallbackSearchUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="block w-full text-center bg-white/20 hover:bg-white/30 text-white py-2.5 rounded-lg font-semibold transition-colors border border-white/30"
@@ -442,22 +493,26 @@ const App: React.FC = () => {
                           Search Solutions
                         </a>
                       </>
+                    ) : (
+                      <p className="text-sm text-indigo-100 mb-4">
+                        No specific product or search terms found for this item.
+                      </p>
                     )}
                   </div>
                 </div>
 
                 {/* Grounding Sources */}
-                {result.groundingSources && result.groundingSources.length > 0 && (
-                  <div className="border-t border-slate-100 pt-6">
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Sources</h3>
+                {validGroundingSources.length > 0 && (
+                  <div className="border-t border-slate-100 dark:border-slate-700 pt-6">
+                    <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">Sources</h3>
                     <div className="flex flex-wrap gap-2">
-                      {result.groundingSources.map((source, idx) => (
+                      {validGroundingSources.map((source, idx) => (
                         <a 
                           key={idx}
                           href={source.uri}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-full transition-colors truncate max-w-[200px]"
+                          className="text-xs bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-full transition-colors truncate max-w-[200px]"
                         >
                           {source.title || "Source Link"}
                         </a>
@@ -468,9 +523,9 @@ const App: React.FC = () => {
 
                 {/* Fallback for parse failure */}
                 {!result.data && result.rawText && (
-                  <div className="bg-orange-50 p-4 rounded-xl border border-orange-200">
-                    <h3 className="font-bold text-orange-800 mb-2">Raw Analysis</h3>
-                    <p className="text-sm text-orange-800 whitespace-pre-wrap">{result.rawText}</p>
+                  <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-xl border border-orange-200 dark:border-orange-800">
+                    <h3 className="font-bold text-orange-800 dark:text-orange-300 mb-2">Raw Analysis</h3>
+                    <p className="text-sm text-orange-800 dark:text-orange-200 whitespace-pre-wrap">{result.rawText}</p>
                   </div>
                 )}
               </div>

@@ -1,38 +1,5 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { AnalysisResult, FullAnalysisResponse, GroundingSource } from "../types";
-
-const getSystemInstruction = (currency: string) => `
-You are Context Lens, a concise, reliable, multimodal assistant. 
-Your job is to analyze a photo of a physical object/scene and return clear, actionable context.
-Provide: what the object/issue is, why it matters, likely causes, step-by-step fixes or next actions, estimated price or time to fix, and confidence level.
-
-IMPORTANT:
-1. The user's preferred currency is "${currency}". specificy price estimates in this currency (e.g. ${currency} 50-100).
-2. If the issue requires a replacement part, tool, or specific product, generate a short, optimized "product_search_query" string that can be used on Google Shopping (e.g., "replacement hinge for IKEA PAX" or "multimeter 600v"). If no product is relevant, this can be null.
-
-Be pragmatic: assume audience is a non-expert but curious user. 
-Prioritize safety and do not provide instructions that require professional certification (e.g., electrical rewiring, surgery). When uncertain, say so and give safe alternatives.
-
-Format your response strictly as a valid JSON object. 
-Do not include markdown formatting like \`\`\`json ... \`\`\`.
-Do not include comments (// or /* */) in the JSON.
-Follow this schema exactly:
-{
-  "object_name": "Brief Name of Object",
-  "issue_detected": "Concise description of the issue",
-  "importance": "Why this matters",
-  "likely_causes": ["Cause 1", "Cause 2"],
-  "steps": ["Step 1", "Step 2", "Step 3"],
-  "estimation": {
-    "price_range": "50-100 ${currency}",
-    "time_estimate": "1-2 hours",
-    "currency": "${currency}"
-  },
-  "confidence_score": 90,
-  "safety_warning": "Warning text if dangerous, or null",
-  "product_search_query": "search term or null"
-}
-`;
 
 export const analyzeImage = async (
   imageBase64: string,
@@ -40,80 +7,99 @@ export const analyzeImage = async (
   note?: string,
   currency: string = "USD"
 ): Promise<FullAnalysisResponse> => {
+  // Fix: Use process.env.API_KEY exclusively as per guidelines. Do not use hardcoded fallback.
   const apiKey = process.env.API_KEY;
+  
   if (!apiKey) {
-    throw new Error("API_KEY is not defined");
+    throw new Error("API Key is missing. Ensure process.env.API_KEY is set.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
 
-  try {
-    const promptText = note
-      ? `Analyze this image. Context note: "${note}". Return JSON only.`
-      : `Analyze this image. Return JSON only.`;
+  // Construct the prompt
+  const userPrompt = note
+    ? `Analyze this image. Context note: "${note}".`
+    : `Analyze this image.`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+  // Define strict schema for the response
+  const responseSchema = {
+    type: Type.OBJECT,
+    properties: {
+      object_name: { type: Type.STRING, description: "Brief Name of Object" },
+      issue_detected: { type: Type.STRING, description: "Concise description of the issue" },
+      importance: { type: Type.STRING, description: "Why this matters" },
+      likely_causes: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: "List of likely causes"
+      },
+      steps: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: "Step-by-step fixes or next actions"
+      },
+      estimation: {
+        type: Type.OBJECT,
+        properties: {
+          price_range: { type: Type.STRING, description: `Price estimate in ${currency}` },
+          time_estimate: { type: Type.STRING, description: "Time estimate to fix" },
+          currency: { type: Type.STRING, description: "Currency code" }
+        },
+        required: ["price_range", "time_estimate", "currency"]
+      },
+      confidence_score: { type: Type.INTEGER, description: "Confidence score between 0 and 100" },
+      safety_warning: { type: Type.STRING, description: "Warning text if dangerous, otherwise empty", nullable: true },
+      product_search_query: { type: Type.STRING, description: "Search term for parts/tools, or empty if none", nullable: true }
+    },
+    required: ["object_name", "issue_detected", "importance", "likely_causes", "steps", "estimation", "confidence_score"]
+  };
+
+  try {
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
       contents: {
         parts: [
           {
             inlineData: {
               mimeType: mimeType,
-              data: imageBase64,
-            },
+              data: imageBase64
+            }
           },
           {
-            text: promptText,
-          },
-        ],
+            text: userPrompt
+          }
+        ]
       },
       config: {
-        systemInstruction: getSystemInstruction(currency),
-        tools: [{ googleSearch: {} }],
-      },
+        systemInstruction: `You are Context Lens. Analyze the photo/scene. Provide: what it is, likely causes, steps to fix, estimates in ${currency}, and product search queries. Be pragmatic and safety-conscious. Ensure estimates and product search terms are relevant to the local market associated with the currency (${currency}).`,
+        responseMimeType: "application/json",
+        responseSchema: responseSchema,
+      }
     });
 
-    const text = response.text || "";
-    let parsedData: AnalysisResult | null = null;
+    const text = response.text;
+    if (!text) throw new Error("No response text received from Gemini.");
 
+    let parsedData: AnalysisResult;
     try {
-      // Pre-process: remove Markdown code blocks if present
-      const cleanedText = text.replace(/```json\n?|```/g, '').trim();
-      
-      // Robust JSON extraction: find the first '{' and last '}'
-      const startIndex = cleanedText.indexOf('{');
-      const endIndex = cleanedText.lastIndexOf('}');
-      
-      if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
-        const jsonString = cleanedText.substring(startIndex, endIndex + 1);
-        parsedData = JSON.parse(jsonString);
-      }
-    } catch (e) {
-      console.error("Failed to parse JSON response:", e);
-      console.log("Raw response:", text);
+        parsedData = JSON.parse(text);
+    } catch(e) {
+        console.error("JSON parse error", text);
+        throw new Error("Invalid JSON received from Gemini.");
     }
 
-    // Extract grounding metadata
-    const groundingSources: GroundingSource[] = [];
-    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    if (chunks) {
-      chunks.forEach((chunk: any) => {
-        if (chunk.web) {
-          groundingSources.push({
-            uri: chunk.web.uri,
-            title: chunk.web.title,
-          });
-        }
-      });
-    }
+    // Ensure nullable fields are handled gracefully
+    if (!parsedData.safety_warning) parsedData.safety_warning = null;
+    if (!parsedData.product_search_query) parsedData.product_search_query = null;
 
     return {
       data: parsedData,
-      groundingSources,
-      rawText: text,
+      groundingSources: [], // Grounding not enabled for basic analysis to keep it fast and free
+      rawText: text
     };
-  } catch (error) {
+
+  } catch (error: any) {
     console.error("Gemini API Error:", error);
-    throw error;
+    throw new Error(error.message || "Failed to analyze image with Gemini.");
   }
 };

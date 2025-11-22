@@ -28,16 +28,16 @@ const HistorySidebar: React.FC<HistorySidebarProps> = ({
 
       {/* Sidebar Panel */}
       <div 
-        className={`fixed top-0 right-0 h-full w-80 md:w-96 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 right-0 h-full w-80 md:w-96 bg-white dark:bg-slate-800 shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         <div className="flex flex-col h-full">
-          <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-            <h2 className="text-xl font-bold text-slate-800">Scan History</h2>
+          <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-slate-50/50 dark:bg-slate-700/50">
+            <h2 className="text-xl font-bold text-slate-800 dark:text-white">Scan History</h2>
             <button 
               onClick={onClose}
-              className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-500"
+              className="p-2 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full transition-colors text-slate-500 dark:text-slate-400"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -47,7 +47,7 @@ const HistorySidebar: React.FC<HistorySidebarProps> = ({
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {history.length === 0 ? (
-              <div className="text-center py-10 text-slate-400">
+              <div className="text-center py-10 text-slate-400 dark:text-slate-500">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto mb-3 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -62,9 +62,9 @@ const HistorySidebar: React.FC<HistorySidebarProps> = ({
                     onSelectHistory(item);
                     onClose();
                   }}
-                  className="bg-white border border-slate-100 hover:border-indigo-300 rounded-xl p-3 cursor-pointer shadow-sm hover:shadow-md transition-all flex gap-3 group"
+                  className="bg-white dark:bg-slate-700 border border-slate-100 dark:border-slate-600 hover:border-indigo-300 dark:hover:border-indigo-500 rounded-xl p-3 cursor-pointer shadow-sm hover:shadow-md transition-all flex gap-3 group"
                 >
-                  <div className="w-16 h-16 rounded-lg bg-slate-100 flex-shrink-0 overflow-hidden">
+                  <div className="w-16 h-16 rounded-lg bg-slate-100 dark:bg-slate-600 flex-shrink-0 overflow-hidden">
                     {item.imagePreview ? (
                       <img 
                         src={item.imagePreview} 
@@ -72,7 +72,7 @@ const HistorySidebar: React.FC<HistorySidebarProps> = ({
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-300">
+                      <div className="w-full h-full flex items-center justify-center text-slate-300 dark:text-slate-500">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
@@ -80,13 +80,13 @@ const HistorySidebar: React.FC<HistorySidebarProps> = ({
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold text-slate-800 truncate group-hover:text-indigo-600 transition-colors">
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-100 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                       {item.result.data?.object_name || "Unknown Analysis"}
                     </h4>
-                    <p className="text-xs text-slate-500 truncate mb-1">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate mb-1">
                       {item.note || "No context note"}
                     </p>
-                    <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium">
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider font-medium">
                       {new Date(item.timestamp).toLocaleDateString()} • {new Date(item.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                     </p>
                   </div>
@@ -96,10 +96,10 @@ const HistorySidebar: React.FC<HistorySidebarProps> = ({
           </div>
           
           {history.length > 0 && (
-            <div className="p-4 border-t border-slate-100 bg-slate-50">
+            <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800">
               <button 
                 onClick={onClearHistory}
-                className="w-full py-2 px-4 rounded-lg border border-slate-200 text-slate-600 text-sm hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                className="w-full py-2 px-4 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 text-sm hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 hover:border-red-200 dark:hover:border-red-800 transition-colors"
               >
                 Clear History
               </button>
