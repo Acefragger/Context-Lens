@@ -1,0 +1,7 @@
+{
+  "name": "Context Lens",
+  "description": "A multimodal assistant that analyzes photos to provide actionable context, identification, and solutions using Gemini AI.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
